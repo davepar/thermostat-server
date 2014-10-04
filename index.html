@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en" ng-app="Thermostat">
+<head>
+  <title>Thermostat</title>
+  <meta charset="utf-8">
+  <script src="http://cdnjs.cloudflare.com/ajax/libs/d3/3.4.11/d3.min.js"></script>
+  <script>
+    var raw_data = {{ data|safe }};
+    var cur_status = {{ status|safe }};
+  </script>
+  <link rel="stylesheet" href="static/main.css">
+</head>
+<body>
+  <div id="graph"></div>
+  <script src="static/main.js"></script>
+</body>
+</html>

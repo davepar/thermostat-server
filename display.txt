@@ -1,0 +1,12 @@
+1234567890123456
+Set 70F hold   *
+Cur 74F  Hum 55%
+
+Set 70F hold   *
+Cur 4F   Hum 55%
+
+Set 70F hold   *
+Cur -14F Hum 55%
+
+Set 70F hold   *
+Cur 101F Hum 55%
