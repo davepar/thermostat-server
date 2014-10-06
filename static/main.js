@@ -89,15 +89,26 @@ raw_data.forEach(function(d) {
   maxValue = Math.max(maxValue, temp, hum, setTemp);
 });
 
-var lastTemp = temps[0] ? temps[0].value : '';
-var lastHum = hums[0] ? hums[0].value : '';
-var lastSetTemp = setTemps[0] ? setTemps[0].value : '';
-var lastTime = temps[0] ? temps[0].time : '';
-
+var lastValue = null;
+if (temps[0]) {
+  lastValue = {
+    'temp': temps[0].value,
+    'hum': hums[0].value,
+    'set': setTemps[0].value,
+    'time': temps[0].time
+  };
+} else {
+  lastValue = {
+    'temp': '',
+    'hum': '',
+    'set': '',
+    'time': ''
+  };
+}
 var labels = {
-  temp: 'Temperature: ' + lastTemp + '°F',
-  hum: 'Humidity: ' + lastHum + '%',
-  setTemp: 'Set temp: ' + lastSetTemp + '°F'
+  temp: 'Temperature: ' + lastValue['temp'] + '°F',
+  hum: 'Humidity: ' + lastValue['hum'] + '%',
+  setTemp: 'Set temp: ' + lastValue['set'] + '°F'
 };
 color.domain([labels.temp, labels.hum, labels.setTemp]);
 
@@ -176,7 +187,7 @@ svg.append('text')
     .attr('y', 18)
     .attr('text-anchor', 'middle')
     .style('font-size', '12px')
-    .text(lastTime.toLocaleString());
+    .text(lastValue['time'].toLocaleString());
 var line3 = 'Heat: ' + (cur_status.heat ? 'on' : 'off') + ' - Hold: ' + (cur_status.hold ? 'on' : 'off');
 svg.append('text')
     .attr('x', (width / 2))
