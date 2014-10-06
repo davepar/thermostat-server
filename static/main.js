@@ -11,6 +11,29 @@ var qs = (function(a) {
     return b;
 })(window.location.search.substr(1).split('&'));
 
+// Distribute values using iterative approach to make it simpler.
+function distribute(vals, keys, delta) {
+  function compare(a, b) {
+    return vals[a] - vals[b];
+  }
+  keys.sort(compare);
+  var distributed = false;
+  while (!distributed) {
+    distributed = true;
+    for (var idx = 1; idx < keys.length; idx++) {
+      var val1 = vals[keys[idx - 1]];
+      var val2 = vals[keys[idx]];
+      if (val2 - val1 < delta) {
+        distributed = false;
+        var ave = (val1 + val2) / 2;
+        var spread = delta * 0.51;
+        vals[keys[idx - 1]] = ave - spread;
+        vals[keys[idx]] = ave + spread;
+      }
+    }
+  }
+}
+
 var dweetId = qs['id'] || 'weatherstation';
 
 var margin = {top: 20, right: 90, bottom: 30, left: 50},
@@ -37,7 +60,6 @@ var yAxis = d3.svg.axis()
     .ticks(5);
 
 var line = d3.svg.line()
-    .interpolate('basis')
     .x(function(d) { return x(d.time); })
     .y(function(d) { return y(d.value); });
 
@@ -112,18 +134,26 @@ var labels = {
 };
 color.domain([labels.temp, labels.hum, labels.setTemp]);
 
+if (temps[0]) {
+  var spread = Math.max(13, maxValue - minValue) / height * 12;
+  distribute(lastValue, ['temp', 'hum', 'set'], spread);
+}
+
 var data = [
   {
     name: labels.temp,
-    values: temps
+    values: temps,
+    labelValue: lastValue['temp']
   },
   {
     name: labels.hum,
-    values: hums
+    values: hums,
+    labelValue: lastValue['hum']
   },
   {
     name: labels.setTemp,
-    values: setTemps
+    values: setTemps,
+    labelValue: lastValue['set']
   }
 ];
 
@@ -162,9 +192,9 @@ series.append('path')
 // Data is in reverse time order, so position text next to first item in array
 if (temps.length > 0) {
   series.append('text')
-      .datum(function(d) { return {name: d.name, value: d.values[0]}; })
+      .datum(function(d) { return {name: d.name, time: d.values[0].time, value: d.labelValue}; })
       .attr('transform', function(d) {
-        return 'translate(' + x(d.value.time) + ',' + y(d.value.value) + ')';
+        return 'translate(' + x(d.time) + ',' + y(d.value) + ')';
       })
       .attr('x', 3)
       .attr('dy', '.35em')
