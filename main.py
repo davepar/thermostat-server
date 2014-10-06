@@ -155,11 +155,12 @@ class Thermostat(webapp2.RequestHandler):
       time_str = str(reading.time)
       values.append("['%s',%s,%s,%s]" %
           (time_str.split('.')[0], reading.temperature, reading.humidity, reading.set_temperature))
-
-    status = {
-      'heat': last_reading.heat_on,
-      'hold': last_reading.hold,
-    }
+    status = {}
+    if last_reading:
+      status = {
+        'heat': last_reading.heat_on,
+        'hold': last_reading.hold,
+      }
     template_values = {
       'data': '[' + ','.join(values) + ']',
       'status': json.dumps(status),

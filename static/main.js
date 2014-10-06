@@ -89,10 +89,10 @@ raw_data.forEach(function(d) {
   maxValue = Math.max(maxValue, temp, hum, setTemp);
 });
 
-var lastTemp = temps[0].value;
-var lastHum = hums[0].value;
-var lastSetTemp = setTemps[0].value;
-var lastTime = temps[0].time;
+var lastTemp = temps[0] ? temps[0].value : '';
+var lastHum = hums[0] ? hums[0].value : '';
+var lastSetTemp = setTemps[0] ? setTemps[0].value : '';
+var lastTime = temps[0] ? temps[0].time : '';
 
 var labels = {
   temp: 'Temperature: ' + lastTemp + '°F',
@@ -149,17 +149,22 @@ series.append('path')
     .style('stroke', function(d) { return color(d.name); });
 
 // Data is in reverse time order, so position text next to first item in array
-series.append('text')
-    .datum(function(d) { return {name: d.name, value: d.values[0]}; })
-    .attr('transform', function(d) {
-      return 'translate(' + x(d.value.time) + ',' + y(d.value.value) + ')';
-    })
-    .attr('x', 3)
-    .attr('dy', '.35em')
-    .text(function(d) { return d.name; });
+if (temps.length > 0) {
+  series.append('text')
+      .datum(function(d) { return {name: d.name, value: d.values[0]}; })
+      .attr('transform', function(d) {
+        return 'translate(' + x(d.value.time) + ',' + y(d.value.value) + ')';
+      })
+      .attr('x', 3)
+      .attr('dy', '.35em')
+      .text(function(d) { return d.name; });
+}
 
 // Title and subtitles
 var title = qs['title'] || 'Temperature & Humidity';
+if (temps.length < 1) {
+  title = 'No data to display';
+}
 svg.append('text')
     .attr('x', (width / 2))
     .attr('y', 0)
