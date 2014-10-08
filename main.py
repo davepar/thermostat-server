@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import webapp2
+from google.appengine.api import users
 from google.appengine.ext import ndb
 from google.appengine.ext.webapp import template
 
@@ -12,6 +13,21 @@ JINJA_ENV = jinja2.Environment(
   extensions=['jinja2.ext.autoescape'],
   autoescape=True,
 )
+
+class IdData(ndb.Model):
+  user_id = ndb.StringProperty('u')
+  token = ndb.StringProperty('t')
+  next_temp_change = ndb.DateTimeProperty('n')
+  schedule_id = ndb.StringProperty('c')
+  schedule = ndb.TextProperty('s')
+
+  @classmethod
+  def get_key(cls, t_id):
+    return ndb.Key('Id', t_id)
+
+  @classmethod
+  def get_id(cls, t_id):
+    return cls.get_key(t_id).get()
 
 class ThermostatData(ndb.Model):
   temperature = ndb.IntegerProperty('t')
@@ -145,28 +161,33 @@ class Thermostat(webapp2.RequestHandler):
       self.response.write('Error: invalid ID')
       return
 
-    # Put readings into template data
-    readings = ThermostatData.query_oneday_readings(t_id)
-    last_reading = None
-    values = []
-    for reading in readings:
-      if last_reading is None:
-        last_reading = reading
-      time_str = str(reading.time)
-      values.append("['%s',%s,%s,%s]" %
-          (time_str.split('.')[0], reading.temperature, reading.humidity, reading.set_temperature))
-    status = {}
-    if last_reading:
-      status = {
-        'heat': last_reading.heat_on,
-        'hold': last_reading.hold,
-      }
-    template_values = {
-      'data': '[' + ','.join(values) + ']',
-      'status': json.dumps(status),
-    }
+    result = {}
+    cur_user = users.get_current_user()
+    if cur_user is None:
+      result['login'] = users.create_login_url()
+
+    # Use cur_user.user_id() as the ID
+
+    id_data = IdData.get_id(t_id)
+    result['claimed'] = id_data is not None
+    if id_data is not None:
+      # Reformat readings to put them into the template
+      readings = ThermostatData.query_oneday_readings(t_id)
+      if readings:
+        last_reading = None
+        values = []
+        for reading in readings:
+          # The last reading is the first in the list
+          if last_reading is None:
+            last_reading = reading
+          time_str = str(reading.time)
+          values.append((time_str.split('.')[0], reading.temperature, reading.humidity, reading.set_temperature))
+        result['heat'] = last_reading.heat_on
+        result['hold'] = last_reading.hold
+        result['data'] = values
+
     template = JINJA_ENV.get_template('index.html')
-    self.response.write(template.render(template_values))
+    self.response.write(template.render({'result': json.dumps(result, separators=(',',':'))}))
 
 def add_value_to_average(old_value, new_value, num_averaged):
   return (old_value * num_averaged + new_value) / (num_averaged + 1)
@@ -179,11 +200,3 @@ app = webapp2.WSGIApplication([
     ('/getheat', GetData),
     ('/', Thermostat),
 ], debug=True)
-
-# TODO: Cron job to clean out or consolidate older data
-# TODO: Form for turning temp up or down
-# TODO: Read schedule into Datastore
-# TODO: Modify temperature according to schedule
-# TODO: Don't draw lines when gap > 15 minutes
-# TODO: Add authentication to change temp, view details
-# TODO: Add secret random code to put into Arduino modules for security
