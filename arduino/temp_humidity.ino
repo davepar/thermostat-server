@@ -42,7 +42,8 @@
 #define UPDATE_AFTER_BUTTON 5000
 
 prog_char host[] PROGMEM = "thermostat-server.appspot.com";
-prog_char host_path[] PROGMEM = "/postdata?id=" KEY_ID "&pwd=" KEY_PWD "&temp=";
+//prog_char host_path[] PROGMEM = "/postdata?id=" KEY_ID "&pwd=" KEY_PWD "&temp=";
+prog_char host_path[] PROGMEM = "/postdata?id=" KEY_ID "&temp=";
 
 // Timeout values
 const unsigned long DHCP_TIMEOUT = 60L * 1000L; // Max time to wait for address from DHCP
@@ -73,7 +74,7 @@ Adafruit_CC3000 cc3000 = Adafruit_CC3000(
 Adafruit_CC3000_Client wifi_client;
 
 // String work area large enough to hold full server request
-char buf[125];
+char buf[130];
 
 // Local server IP
 unsigned long ip = 0;
@@ -150,6 +151,12 @@ void setup(void)
     fatal_error(F("begin"));
   }
 
+  setup_cc3000();
+
+  lcd.clear();
+}
+
+void setup_cc3000(void) {
   // Connect to  WiFi network
   if (!cc3000.connectToAP(WLAN_SSID, WLAN_PASS, WLAN_SECURITY)) {
     fatal_error(F("connect"));
@@ -184,7 +191,6 @@ void setup(void)
   cc3000.printIPdotsRev(ip);
   Serial.println();
   print_free_mem();
-  lcd.clear();
 }
 
 void loop(void)
@@ -300,7 +306,9 @@ void send_request (char *request) {
 
   // Send request
   if (!wifi_client.connected()) {
-    Serial.println(F("Connection failed"));
+    Serial.println(F("Connection failed, reseting"));
+    cc3000.reboot();
+    setup_cc3000();
     goto final;
   }
 

@@ -39,8 +39,6 @@ function distribute(vals, keys, delta) {
   }
 }
 
-var dweetId = qs['id'] || 'weatherstation';
-
 var margin = {top: 20, right: 90, bottom: 30, left: 50},
     width = 960 - margin.left - margin.right,
     height = 500 - margin.top - margin.bottom;
@@ -94,27 +92,29 @@ var minValue = 100;
 var maxValue = 0;
 
 // Data is injected into html by server script
-raw_data.forEach(function(d) {
-  var time = parseTime(d[0]);
-  var temp = +d[1] / 10;
-  var hum = +d[2] / 10;
-  var setTemp = +d[3] / 10;
+if ('data' in result) {
+  result.data.forEach(function(d) {
+    var time = parseTime(d[0]);
+    var temp = +d[1] / 10;
+    var hum = +d[2] / 10;
+    var setTemp = +d[3] / 10;
 
-  temps.push({
-    time: time,
-    value: temp
+    temps.push({
+      time: time,
+      value: temp
+    });
+    hums.push({
+      time: time,
+      value: hum
+    })
+    setTemps.push({
+      time: time,
+      value: setTemp
+    })
+    minValue = Math.min(minValue, temp, hum, setTemp);
+    maxValue = Math.max(maxValue, temp, hum, setTemp);
   });
-  hums.push({
-    time: time,
-    value: hum
-  })
-  setTemps.push({
-    time: time,
-    value: setTemp
-  })
-  minValue = Math.min(minValue, temp, hum, setTemp);
-  maxValue = Math.max(maxValue, temp, hum, setTemp);
-});
+}
 
 var lastValue = null;
 if (temps[0]) {
@@ -223,7 +223,7 @@ svg.append('text')
     .attr('text-anchor', 'middle')
     .style('font-size', '12px')
     .text(lastValue['time'].toLocaleString());
-var line3 = 'Heat: ' + (cur_status.heat ? 'on' : 'off') + ' - Hold: ' + (cur_status.hold ? 'on' : 'off');
+var line3 = 'Heat: ' + (result.heat ? 'on' : 'off') + ' - Hold: ' + (result.hold ? 'on' : 'off');
 svg.append('text')
     .attr('x', (width / 2))
     .attr('y', 32)
