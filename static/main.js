@@ -1,3 +1,8 @@
+/*
+*  Javascript for displaying a temperature and humidity graph for a thermostat.
+*  https://github.com/Davepar/thermostat-server
+*/
+
 // Get query string parameters (function from StackOverflow)
 var qs = (function(a) {
     if (a == "") return {};
