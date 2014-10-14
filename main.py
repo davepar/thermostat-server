@@ -188,7 +188,7 @@ class Thermostat(webapp2.RequestHandler):
         claim_id = self.request.get('claim') == 'y'
         if claim_id:
           if cur_user is None:
-            return self.redirect(users.create_login_url() + '?id=' + t_id)
+            return self.redirect(str(users.create_login_url() + '&claim=y&id=' + t_id))
           id_data = IdData(
             parent=IdData.get_key(t_id),
             user_id = cur_user.user_id(),

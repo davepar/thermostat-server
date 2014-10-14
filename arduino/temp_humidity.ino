@@ -18,7 +18,7 @@
 *    #define WLAN_PASS       "mypassword"   // Your wifi password.
 *    #define WLAN_SECURITY   WLAN_SEC_WPA2  // This can be WLAN_SEC_UNSEC, WLAN_SEC_WEP, WLAN_SEC_WPA or WLAN_SEC_WPA2
 *    #define KEY_ID          "mykey"        // A unique ID from the thermostat server at http://thermostat-server.appspot.com
-*    #define KEY_PWD         "mypassword"   // The assigned password from the thermostat server.
+*    #define KEY_TOKEN       "mytoken"      // The token assigned by the thermostat server.
 */
 // Pull in private data
 #include "private.h"
@@ -42,8 +42,7 @@
 #define UPDATE_AFTER_BUTTON 5000
 
 prog_char host[] PROGMEM = "thermostat-server.appspot.com";
-//prog_char host_path[] PROGMEM = "/postdata?id=" KEY_ID "&pwd=" KEY_PWD "&temp=";
-prog_char host_path[] PROGMEM = "/postdata?id=" KEY_ID "&temp=";
+prog_char host_path[] PROGMEM = "/postdata?id=" KEY_ID "&token=" KEY_TOKEN "&temp=";
 
 // Timeout values
 const unsigned long DHCP_TIMEOUT = 60L * 1000L; // Max time to wait for address from DHCP
