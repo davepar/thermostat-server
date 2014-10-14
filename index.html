@@ -30,6 +30,9 @@
     </div>
     <div id="graph" ng-show="info.claimed"></div>
     <br>
+    <div ng-show="info.claimed && !info.token">
+      <a href="{{ info.login }}">Sign in</a> to set temperature
+    </div>
     <div ng-show="info.token">
       Token for sending data: {{ info.token }}<br>
     </div>

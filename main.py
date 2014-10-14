@@ -182,13 +182,15 @@ class Thermostat(webapp2.RequestHandler):
       info['id'] = t_id
       # Check if user is signed in
       cur_user = users.get_current_user()
+      if cur_user is None:
+        info['login'] = str(users.create_login_url('/?id=' + t_id))
       # See if the ID is claimed
       id_data = IdData.get_id(t_id)
       if id_data is None:
         claim_id = self.request.get('claim') == 'y'
         if claim_id:
           if cur_user is None:
-            return self.redirect(str(users.create_login_url() + '&claim=y&id=' + t_id))
+            return self.redirect(info['login'])
           id_data = IdData(
             parent=IdData.get_key(t_id),
             user_id = cur_user.user_id(),
@@ -229,6 +231,7 @@ def get_scheduled_temp():
 def create_token():
   random.seed()
   return ''.join([random.choice(string.ascii_letters + string.digits) for x in range(12)])
+
 
 app = webapp2.WSGIApplication([
     ('/postdata', PostData),
