@@ -3,14 +3,38 @@
 <head>
   <title>Thermostat</title>
   <meta charset="utf-8">
+  <script src="http://ajax.googleapis.com/ajax/libs/angularjs/1.2.26/angular.min.js"></script>
   <script src="http://cdnjs.cloudflare.com/ajax/libs/d3/3.4.11/d3.min.js"></script>
   <script>
-    var result = {{ result|safe }};
+    var info_from_server = {{ info|safe }};
   </script>
   <link rel="stylesheet" href="static/main.css">
 </head>
 <body>
-  <div id="graph"></div>
+  {% raw %}
+  <div ng-controller="ThermostatCtrl">
+    <div ng-show="!info.id">
+      <form action="/" method="get">
+        What is your thermostat ID?<br>
+        <input type="text" name="id">
+        <button type="submit">Go</button>
+      </form>
+    </div>
+    <div ng-show="info.id && !info.claimed">
+      <form action="/" method="get">
+        Would you like to claim ID "{{ info.id }}"?
+        <button ng-click="">Claim</button>
+        <input type="hidden" name="id" value="{{ info.id }}">
+        <input type="hidden" name="claim" value="y">
+      </form>
+    </div>
+    <div id="graph" ng-show="info.claimed"></div>
+    <br>
+    <div ng-show="info.token">
+      Token for sending data: {{ info.token }}<br>
+    </div>
+  </div>
   <script src="static/main.js"></script>
+  {% endraw %}
 </body>
 </html>

@@ -3,6 +3,8 @@ import jinja2
 import json
 import logging
 import os
+import random
+import string
 import webapp2
 from google.appengine.api import users
 from google.appengine.ext import ndb
@@ -27,7 +29,8 @@ class IdData(ndb.Model):
 
   @classmethod
   def get_id(cls, t_id):
-    return cls.get_key(t_id).get()
+    key = cls.get_key(t_id)
+    return cls.query(ancestor=key).get()
 
 class ThermostatData(ndb.Model):
   temperature = ndb.IntegerProperty('t')
@@ -62,6 +65,17 @@ class PostData(webapp2.RequestHandler):
     if not t_id:
       self.response.write('Error: invalid ID')
       return
+
+    id_data = IdData.get_id(t_id)
+    if id_data is None:
+      self.response.write('Error: unknown ID')
+      return
+
+    # TODO: Uncomment when ready:
+    # token = self.request.get('token')
+    # if token != id_data.token:
+    #   self.response.write('Error: invalid token')
+    #   return
 
     temp = self.request.get('temp')
     hum = self.request.get('hum')
@@ -156,24 +170,40 @@ class GetData(webapp2.RequestHandler):
 
 class Thermostat(webapp2.RequestHandler):
   def get(self):
+    info = {
+      'id': None,
+      'login': None,
+      'claimed': False,
+      'owned': False,
+    }
+    # Check if ID specified
     t_id = self.request.get('id')
-    if not t_id:
-      self.response.write('Error: invalid ID')
-      return
+    if t_id:
+      info['id'] = t_id
+      # Check if user is signed in
+      cur_user = users.get_current_user()
+      # See if the ID is claimed
+      id_data = IdData.get_id(t_id)
+      if id_data is None:
+        claim_id = self.request.get('claim') == 'y'
+        if claim_id:
+          if cur_user is None:
+            return self.redirect(users.create_login_url() + '?id=' + t_id)
+          id_data = IdData(
+            parent=IdData.get_key(t_id),
+            user_id = cur_user.user_id(),
+            token = create_token(),
+          )
+          id_data.put()
+          return self.redirect('/?id=' + t_id)
+      else:
+        info['claimed'] = True
+        # See if user owns the ID
+        if cur_user and id_data.user_id == cur_user.user_id():
+          info['token'] = id_data.token
 
-    result = {}
-    cur_user = users.get_current_user()
-    if cur_user is None:
-      result['login'] = users.create_login_url()
-
-    # Use cur_user.user_id() as the ID
-
-    id_data = IdData.get_id(t_id)
-    result['claimed'] = id_data is not None
-    if id_data is not None:
-      # Reformat readings to put them into the template
-      readings = ThermostatData.query_oneday_readings(t_id)
-      if readings:
+        # Reformat readings to put them into the template
+        readings = ThermostatData.query_oneday_readings(t_id)
         last_reading = None
         values = []
         for reading in readings:
@@ -182,18 +212,23 @@ class Thermostat(webapp2.RequestHandler):
             last_reading = reading
           time_str = str(reading.time)
           values.append((time_str.split('.')[0], reading.temperature, reading.humidity, reading.set_temperature))
-        result['heat'] = last_reading.heat_on
-        result['hold'] = last_reading.hold
-        result['data'] = values
+        if last_reading:
+          info['heat'] = last_reading.heat_on
+          info['hold'] = last_reading.hold
+          info['data'] = values
 
     template = JINJA_ENV.get_template('index.html')
-    self.response.write(template.render({'result': json.dumps(result, separators=(',',':'))}))
+    self.response.write(template.render({'info': json.dumps(info, separators=(',',':'))}))
 
 def add_value_to_average(old_value, new_value, num_averaged):
   return (old_value * num_averaged + new_value) / (num_averaged + 1)
 
 def get_scheduled_temp():
   return None
+
+def create_token():
+  random.seed()
+  return ''.join([random.choice(string.ascii_letters + string.digits) for x in range(12)])
 
 app = webapp2.WSGIApplication([
     ('/postdata', PostData),
