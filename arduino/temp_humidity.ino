@@ -151,12 +151,18 @@ void setup(void)
     fatal_error(F("begin"));
   }
 
-  setup_cc3000();
+  setup_cc3000(false);
 
   lcd.clear();
 }
 
-void setup_cc3000(void) {
+void setup_cc3000(boolean reboot) {
+
+  if (reboot) {
+    // reboots++;
+    cc3000.reboot(0);
+  }
+
   // Connect to  WiFi network
   if (!cc3000.connectToAP(WLAN_SSID, WLAN_PASS, WLAN_SECURITY)) {
     fatal_error(F("connect"));
@@ -220,22 +226,17 @@ void loop(void)
   itoa(set_temp, &buf[idx], 10);
   idx = strlen(buf);
   buf[idx++] = char(1);
+
+  // For debugging
+  // buf[idx++] = ' ';
+  // itoa(reboots, &buf[idx], 10);
+
   if (temp_hold) {
     strcpy(&buf[idx], " hold    ");
   } else {
     strcpy(&buf[idx], "         ");
   }
   buf[15] = heat_on ? '*' : ' ';
-
-  // For debugging
-  // itoa(set_temp, &buf[idx], 10);
-  // idx = strlen(buf);
-  // buf[idx++] = char(1);
-  // buf[idx++] = ' ';
-  // itoa(freeMemory(), &buf[idx], 10);
-  // idx = strlen(buf);
-  // buf[idx++] = ' ';
-  // itoa(loop_count, &buf[idx], 10);
 
   lcd.setCursor(0, 0);
   lcd.print(buf);
@@ -308,9 +309,10 @@ void send_request (char *request) {
   if (!wifi_client.connected()) {
     Serial.println(F("Connection failed, reseting"));
     cc3000.reboot();
-    setup_cc3000();
+    setup_cc3000(true);
     goto final;
   }
+  Serial.println(F("Connection succeeded"));
 
   wifi_client.println(request);
   wifi_client.println(F("Connection: close"));
