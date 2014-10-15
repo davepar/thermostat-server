@@ -203,6 +203,7 @@ class Thermostat(webapp2.RequestHandler):
         # See if user owns the ID
         if cur_user and id_data.user_id == cur_user.user_id():
           info['token'] = id_data.token
+          info['scheduleId'] = id_data.schedule_id
 
         # Reformat readings to put them into the template
         readings = ThermostatData.query_oneday_readings(t_id)
