@@ -71,11 +71,10 @@ class PostData(webapp2.RequestHandler):
       self.response.write('Error: unknown ID')
       return
 
-    # TODO: Uncomment when ready:
-    # token = self.request.get('token')
-    # if token != id_data.token:
-    #   self.response.write('Error: invalid token')
-    #   return
+    token = self.request.get('token')
+    if token != id_data.token:
+      self.response.write('Error: invalid token')
+      return
 
     temp = self.request.get('temp')
     hum = self.request.get('hum')
