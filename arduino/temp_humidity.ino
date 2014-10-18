@@ -41,11 +41,13 @@
 #define UPDATE_INTERVAL 60000
 #define UPDATE_AFTER_BUTTON 5000
 
-prog_char host[] PROGMEM = "thermostat-server.appspot.com";
-prog_char host_path[] PROGMEM = "/postdata?id=" KEY_ID "&token=" KEY_TOKEN "&temp=";
+#define HOST "arduino-stat.appspot.com"
+prog_char host[] PROGMEM = HOST;
+prog_char host_hdr[] PROGMEM = "Host: " HOST;
+prog_char host_path[] PROGMEM = "/post?id=" KEY_ID "&k=" KEY_TOKEN "&t=";
 
 // Timeout values
-const unsigned long DHCP_TIMEOUT = 60L * 1000L; // Max time to wait for address from DHCP
+const unsigned long DHCP_TIMEOUT = 15L * 1000L; // Max time to wait for address from DHCP
 const unsigned long DNS_TIMEOUT  = 15L * 1000L; // Max time to wait for DNS lookup
 const unsigned long CONNECT_TIMEOUT = 15L * 1000L; // Max time to wait for a connection
 const unsigned long RESPONSE_TIMEOUT = 10L * 1000L; // Max time to wait for data from server
@@ -78,6 +80,8 @@ char buf[130];
 // Local server IP
 unsigned long ip = 0;
 
+int reboots = 0;
+
 // State variables
 int current_t = 0;
 int current_h = 0;
@@ -91,6 +95,14 @@ const int debounce_guard = 200;
 volatile unsigned long last_update_time = 0;
 volatile unsigned long update_interval = 0; // First time through update immediately
 volatile boolean send_set_temp = false;
+
+// Forward declarations
+void print_free_mem();
+void fatal_error(const __FlashStringHelper* msg);
+int timedRead(void);
+int readString(int end_char, char *buf, int buf_len);
+void send_request (char *request);
+void setup_cc3000(boolean reboot);
 
 // Handle button push interrupt
 void button_isr() {
@@ -148,6 +160,7 @@ void setup(void)
   // Initialise the CC3000 module
   if (!cc3000.begin()) {
     fatal_error(F("begin"));
+    while(true);
   }
 
   setup_cc3000(false);
@@ -157,45 +170,56 @@ void setup(void)
 
 void setup_cc3000(boolean reboot) {
 
-  if (reboot) {
-    // reboots++;
-    cc3000.reboot(0);
-  }
+  int retries = 0;
+  int max_retries = 3;
 
-  // Connect to  WiFi network
-  if (!cc3000.connectToAP(WLAN_SSID, WLAN_PASS, WLAN_SECURITY)) {
-    fatal_error(F("connect"));
-  }
-  Serial.println(F("Connected to WiFi!"));
+  while (true) {
+    retries++;
 
-  // Check status of DHCP
-  Serial.println(F("Request DHCP"));
-  unsigned long start_time = millis();
-  while (!cc3000.checkDHCP() && (millis() - start_time) < DHCP_TIMEOUT) {
-    delay(1000);
-  }
-  if (!cc3000.checkDHCP()) {
-    fatal_error(F("checkDHCP"));
-  }
-
-  // Look up server's IP address
-  strcpy_P(buf, host);
-  Serial.print(buf);
-  Serial.print(F(" -> "));
-  start_time = millis();
-  while ((ip  ==  0L) && ((millis() - start_time) < DNS_TIMEOUT))  {
-    cc3000.getHostByName(buf, &ip);
-    if (ip != 0L) {
-      break;
+    if (reboot || retries > 1) {
+      reboots++;
+      cc3000.reboot(0);
     }
-    delay(1000);
+
+    // Connect to  WiFi network
+    if (!cc3000.connectToAP(WLAN_SSID, WLAN_PASS, WLAN_SECURITY)) {
+      fatal_error(F("connect"));
+      continue;
+    }
+    Serial.println(F("Connected to WiFi!"));
+
+    // Check status of DHCP
+    Serial.println(F("Request DHCP"));
+    unsigned long start_time = millis();
+    while (!cc3000.checkDHCP() && (millis() - start_time) < DHCP_TIMEOUT) {
+      delay(1000);
+    }
+    if (!cc3000.checkDHCP()) {
+      fatal_error(F("checkDHCP"));
+      continue;
+    }
+
+    // Look up server's IP address
+    strcpy_P(buf, host);
+    Serial.print(buf);
+    Serial.print(F(" -> "));
+    start_time = millis();
+    while ((ip  ==  0L) && ((millis() - start_time) < DNS_TIMEOUT))  {
+      cc3000.getHostByName(buf, &ip);
+      if (ip != 0L) {
+        break;
+      }
+      delay(1000);
+    }
+    if (ip == 0L) {
+      fatal_error(F("getHost"));
+      continue;
+    }
+    cc3000.printIPdotsRev(ip);
+    Serial.println();
+    print_free_mem();
+    break;
   }
-  if (ip == 0L) {
-    fatal_error(F("getHost"));
-  }
-  cc3000.printIPdotsRev(ip);
-  Serial.println();
-  print_free_mem();
 }
 
 void loop(void)
@@ -268,15 +292,15 @@ void loop(void)
     strcat_P(buf, host_path);
     idx = strlen(buf);
     itoa(current_t, &buf[idx], 10);
-    strcat(buf, "&hum=");
+    strcat(buf, "&h=");
     idx = strlen(buf);
     itoa(current_h, &buf[idx], 10);
     if (send_set_temp) {
       send_set_temp = false;
-      strcat(buf, "&set=");
+      strcat(buf, "&s=");
       idx = strlen(buf);
       itoa(set_temp * 10, &buf[idx], 10);
-      strcat(buf, "&hold=");
+      strcat(buf, "&d=");
       idx = strlen(buf);
       buf[idx++] = temp_hold ? 'y' : 'n';
       buf[idx++] = 0;
@@ -292,12 +316,13 @@ void loop(void)
 void send_request (char *request) {
   int c = 0;
   int t = 0;
+  int result = 0;
 
   Serial.println(F("Sending:"));
   Serial.println(request);
 
   // Connect
-  Serial.println(F("Connecting to server..."));
+  Serial.println(F("Connecting..."));
   unsigned long start_time = millis();
   do {
     wifi_client = cc3000.connectTCP(ip, 80);
@@ -314,12 +339,13 @@ void send_request (char *request) {
   Serial.println(F("Connection succeeded"));
 
   wifi_client.println(request);
+  wifi_client.print(host_hdr);
+  wifi_client.println(F("User-Agent: ArduinoWiFi/1.1"));
   wifi_client.println(F("Connection: close"));
-  wifi_client.println(F(""));
+  wifi_client.println();
   Serial.println(F("Connected & Data sent"));
 
   // Skip over HTTP response headers
-  int result;
   while ((result = readString('\n', 0, 0)) != 0) {
     if (result == -1) {
       Serial.println(F("Reading headers failed"));
@@ -407,16 +433,17 @@ int timedRead(void) {
 }
 
 // Write error message on LCD and loop indefinitely.
-void fatal_error(String msg) {
+void fatal_error(const __FlashStringHelper* msg) {
+  Serial.print(F("Fatal error: "));
+  Serial.println(msg);
+  strcpy_P(buf, (const prog_char*) msg);
   lcd.clear();
   lcd.print("Error:");
   lcd.setCursor(0, 1);
-  lcd.print(msg);
-  while (true) ;
+  lcd.print(buf);
 }
 
 void print_free_mem() {
   Serial.print(F("Free memory: "));
   Serial.println(freeMemory());
 }
-

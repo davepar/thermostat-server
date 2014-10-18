@@ -71,13 +71,13 @@ class PostData(webapp2.RequestHandler):
       self.response.write('Error: unknown ID')
       return
 
-    token = self.request.get('token')
+    token = self.request.get('k')
     if token != id_data.token:
       self.response.write('Error: invalid token')
       return
 
-    temp = self.request.get('temp')
-    hum = self.request.get('hum')
+    temp = self.request.get('t')
+    hum = self.request.get('h')
     if not temp or not hum:
       self.response.write('Error: invalid parameters')
       return
@@ -101,14 +101,14 @@ class PostData(webapp2.RequestHandler):
         prev_reading = readings[1]
 
     # Determine whether hold temperature is in request
-    hold = self.request.get('hold', None)
+    hold = self.request.get('d', None)
     if hold is None:
       hold = last_reading.hold
     else:
       hold = (hold == 'y')
 
     # Determine whether set temperature is in request
-    set_temp = self.request.get('set', None)
+    set_temp = self.request.get('s', None)
     if set_temp is None:
       if hold:
         # Holding temp, ignore schedule
@@ -176,6 +176,7 @@ class Thermostat(webapp2.RequestHandler):
       'owned': False,
     }
     # Check if ID specified
+    # TODO: ID can only be up to 11 characters long
     t_id = self.request.get('id')
     if t_id:
       info['id'] = t_id
@@ -230,11 +231,11 @@ def get_scheduled_temp():
 
 def create_token():
   random.seed()
-  return ''.join([random.choice(string.ascii_letters + string.digits) for x in range(12)])
+  return ''.join([random.choice(string.ascii_letters + string.digits) for x in range(8)])
 
 
 app = webapp2.WSGIApplication([
-    ('/postdata', PostData),
+    ('/post', PostData),
     ('/getheat', GetData),
     ('/', Thermostat),
 ], debug=True)
