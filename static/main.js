@@ -201,6 +201,7 @@ myApp.controller('ThermostatCtrl', ['$scope', '$location', function($scope, $loc
         })
         .attr('x', 3)
         .attr('dy', '.35em')
+        .style('font-size', '10px')
         .text(function(d) { return d.name; });
   }
 

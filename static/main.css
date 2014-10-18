@@ -6,6 +6,10 @@ body {
   font-family: 'Open Sans', sans-serif;
 }
 
+:link {
+  color: #0645ad;
+}
+
 .axis path,
 .axis line {
   fill: none;
