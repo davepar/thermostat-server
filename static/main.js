@@ -138,7 +138,7 @@ myApp.controller('ThermostatCtrl', ['$scope', '$location', function($scope, $loc
   color.domain([labels.temp, labels.hum, labels.setTemp]);
 
   if (temps[0]) {
-    var spread = Math.max(13, maxValue - minValue) / height * 12;
+    var spread = Math.max(14, maxValue - minValue) / height * 12;
     distribute(lastValue, ['temp', 'hum', 'set'], spread);
   }
 
