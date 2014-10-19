@@ -5,12 +5,26 @@
 
 var myApp = angular.module('Thermostat', []);
 
-myApp.controller('ThermostatCtrl', ['$scope', '$location', function($scope, $location) {
-  $scope.location = $location;
+myApp.controller('ThermostatCtrl',
+    ['$scope', '$http', function($scope, $http) {
   $scope.info = info_from_server;
 
   $scope.debug = function() {
     console.log($scope);
+  };
+
+  $scope.updateSchedule = function() {
+    var params = {
+      id: $scope.info.id,
+      scheduleId: $scope.info.scheduleId
+    };
+    $http.post('/update', params)
+      .success(function(data) {
+
+      })
+      .error(function(data) {
+
+      });
   };
 
   // Distribute values using iterative approach to make it simpler.
@@ -138,7 +152,7 @@ myApp.controller('ThermostatCtrl', ['$scope', '$location', function($scope, $loc
   color.domain([labels.temp, labels.hum, labels.setTemp]);
 
   if (temps[0]) {
-    var spread = Math.max(14, maxValue - minValue) / height * 12;
+    var spread = Math.max(18, maxValue - minValue) / height * 12;
     distribute(lastValue, ['temp', 'hum', 'set'], spread);
   }
 

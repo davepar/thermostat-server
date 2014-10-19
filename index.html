@@ -23,7 +23,7 @@
     <div ng-show="info.id && !info.claimed">
       <form action="/" method="get">
         Would you like to claim ID "{{ info.id }}"?
-        <button ng-click="">Claim</button>
+        <button>Claim</button>
         <input type="hidden" name="id" value="{{ info.id }}">
         <input type="hidden" name="claim" value="y">
       </form>
@@ -34,8 +34,12 @@
       <a href="{{ info.login }}">Sign in</a> to set temperature
     </div>
     <div ng-show="info.token">
-      Token for sending data: {{ info.token }}<br>
-      Schedule ID: <input type="text" ng-model="info.scheduleId">
+      Token for sending data: {{ info.token }}<br><br>
+      <form action="/update" method="post">
+        Schedule ID: <input type="text" name="scheduleId" ng-model="info.scheduleId">
+        <input type="hidden" name="id" value="{{ info.id }}">
+        <button ng-disabled="!info.scheduleId">Update</button>
+      </form>
     </div>
   </div>
   <script src="static/main.js"></script>

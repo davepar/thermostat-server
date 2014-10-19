@@ -167,6 +167,19 @@ class GetData(webapp2.RequestHandler):
     self.response.write('%s' % int(reading.heat_on))
 
 
+class Schedule(webapp2.RequestHandler):
+  def post(self):
+    t_id = self.request.get('id')
+    s_id = self.request.get('scheduleId')
+    cur_user = users.get_current_user()
+    id_data = IdData.get_id(t_id)
+    if cur_user and id_data.user_id == cur_user.user_id():
+      id_data.schedule_id = s_id
+      id_data.put()
+
+    return self.redirect('/?id=' + t_id)
+
+
 class Thermostat(webapp2.RequestHandler):
   def get(self):
     info = {
@@ -237,5 +250,6 @@ def create_token():
 app = webapp2.WSGIApplication([
     ('/post', PostData),
     ('/getheat', GetData),
+    ('/update', Schedule),
     ('/', Thermostat),
 ], debug=True)
