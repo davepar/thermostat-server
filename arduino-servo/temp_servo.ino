@@ -29,7 +29,11 @@ servo with the CC3000 wifi chip.
 #define ADAFRUIT_CC3000_CS    10
 
 // Update intervals in milliseconds
-#define UPDATE_INTERVAL 15000
+#define UPDATE_INTERVAL 30000
+
+// Turn off heat after 5 minutes of no server contact
+const unsigned long RESET_TIME = 5L * 60L * 1000L;
+unsigned long last_server_contact = 0;
 
 #define HOST "arduino-stat.appspot.com"
 prog_char host[] PROGMEM = HOST;
@@ -165,13 +169,17 @@ void loop(void)
     strcat_P(buf, host_path);
     strcat(buf, " HTTP/1.0");
     send_request(buf);
-    if (heat_on) {
-      servo_pos = 0;
-    } else {
-      servo_pos = 180;
-    }
-    myservo.write(servo_pos);
   }
+  current_time = millis();
+  if ((current_time - last_server_contact) >= RESET_TIME) {
+    heat_on = false;
+  }
+  if (heat_on) {
+    servo_pos = 0;
+  } else {
+    servo_pos = 180;
+  }
+  myservo.write(servo_pos);
 
   delay(1);
 }
@@ -224,6 +232,7 @@ void send_request (char *request) {
     Serial.println(F("Read heat failed"));
     goto final;
   }
+  last_server_contact = millis();
   heat_on = (c == '1');
   Serial.print(F("  heat: "));
   Serial.println((char) c);
