@@ -13,6 +13,9 @@
 <body>
   {% raw %}
   <div ng-controller="ThermostatCtrl">
+    <div ng-show="info.message">
+      {{ info.message }}
+    </div>
     <div ng-show="!info.id">
       <form action="/" method="get">
         What is your thermostat ID?<br>
