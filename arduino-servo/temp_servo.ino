@@ -49,6 +49,10 @@ const unsigned long RESPONSE_TIMEOUT = 10L * 1000L; // Max time to wait for data
 // Connections
 const int SERVO_PIN = 9;
 
+// Servo positions
+const int SERVO_HEAT_ON = 0;
+const int SERVO_HEAT_OFF = 180;
+
 // Create Servo and CC3000 objects
 Servo myservo;
 Adafruit_CC3000 cc3000 = Adafruit_CC3000(
@@ -90,6 +94,7 @@ void setup(void)
 
   // Attach the servo on pin 9 to the servo object
   myservo.attach(SERVO_PIN);
+  myservo.write(SERVO_HEAT_OFF);
 
   // Initialise the CC3000 module
   if (!cc3000.begin()) {
@@ -175,9 +180,9 @@ void loop(void)
     heat_on = false;
   }
   if (heat_on) {
-    servo_pos = 0;
+    servo_pos = SERVO_HEAT_ON;
   } else {
-    servo_pos = 180;
+    servo_pos = SERVO_HEAT_OFF;
   }
   myservo.write(servo_pos);
 
