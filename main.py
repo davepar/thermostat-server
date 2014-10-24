@@ -124,7 +124,7 @@ class PostData(webapp2.RequestHandler):
 
     # Determine whether to turn heat on or off
     if last_reading.heat_on:
-      heat_on = (temp < (set_temp + 10))
+      heat_on = (temp < (set_temp + 5))
     else:
       heat_on = (temp < (set_temp - 5))
 
