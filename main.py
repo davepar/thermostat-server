@@ -7,7 +7,7 @@ import string
 import urllib2
 import webapp2
 from datetime import datetime, timedelta
-from dateutil import parser, zoneinfo, tz
+from dateutil import parser, tz
 from google.appengine.api import users
 from google.appengine.ext import ndb
 from google.appengine.ext.webapp import template
@@ -261,26 +261,21 @@ class Thermostat(webapp2.RequestHandler):
     self.response.write(template.render({'info': json.dumps(info, separators=(',',':'))}))
 
 
-class Test(webapp2.RequestHandler):
-  def get(self):
-    response = str(parser.parse('Monday 10pm PT', tzinfos=tzi))
-    response += '<br>' + str(normalize('Monday 10pm PT'))
-    self.response.write(response)
+us_schedule = ',M3.2.0,M11.1.0'
 
-
-tz_abbr = {
-  'ET': 'America/New_York',
-  'CT': 'America/Chicago',
-  'MT': 'America/Denver',
-  'RT': 'America/Phoeniz',
-  'PT': 'America/Los_Angeles',
-  'AT': 'America/Anchorage',
-  'HT': 'Pacific/Honolulu',
+tzis = {
+    'ET': tz.tzstr('EST+5EDT' + us_schedule),
+    'CT': tz.tzstr('CST+6CDT' + us_schedule),
+    'MT': tz.tzstr('MST+7MDT' + us_schedule),
+    'AZT': tz.tzstr('MST+7'),
+    'PT': tz.tzstr('PST+8PDT' + us_schedule),
+    'AKT': tz.tzstr('AKST+9AKDT' + us_schedule),
+    'HAT': tz.tzstr('HAST+10HADT' + us_schedule),
+    'HT': tz.tzstr('HAST+10'),
 }
-tzi = dict([(k, zoneinfo.gettz(v)) for k,v in tz_abbr.iteritems()])
 
 def normalize(dt_str):
-  dt = parser.parse(dt_str, tzinfos=tzi).astimezone(tz.tzutc()).replace(tzinfo=None)
+  dt = parser.parse(dt_str, tzinfos=tzis).astimezone(tz.tzutc()).replace(tzinfo=None)
 
   # Normalize each datetime to within one week from now
   now = datetime.utcnow()
@@ -347,34 +342,24 @@ def get_schedule(schedule_id):
           % (schedule_id, result['temperature']))
       return False
 
-    schedule.append({'d': result['day'], 't': result['time'], 'e': result['temperature']})
+    schedule.append({'dt': day_time, 't': result['temperature']})
 
   return json.dumps(schedule, separators=(',', ':'))
 
 def get_next_event(schedule):
   schedule = json.loads(schedule)
-  tzi = {'PDT': 7}
   current_schedule = [{
-    # TODO: Fix the time zone handling. Currently hard-coded to PDT
-    'dt': parser.parse('%s %s PDT' % (entry['d'], entry['t']), tzinfos=tzi),
-    'e': entry['e'],
+    'dt': normalize(entry['dt']),
+    't': entry['t'],
   } for entry in schedule]
-
   current_schedule.sort(key=lambda x:x['dt'])
-  now = datetime.utcnow()
-  # Rotate list until next entry is first
-  while current_schedule[0]['dt'] < now:
-    entry = current_schedule.pop(0)
-    entry['dt'] += timedelta(days=7)
-    current_schedule.append(entry)
-
-  return current_schedule[-1]['e'] * 10, current_schedule[0]['dt']
+  print current_schedule
+  return current_schedule[-1]['t'] * 10, current_schedule[0]['dt']
 
 
 app = webapp2.WSGIApplication([
     ('/post', PostData),
     ('/getheat', GetHeat),
     ('/update', Schedule),
-    ('/test', Test),
     ('/', Thermostat),
 ], debug=True)
