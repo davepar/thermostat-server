@@ -274,8 +274,8 @@ tzis = {
     'HT': tz.tzstr('HAST+10'),
 }
 
-def normalize(dt_str):
-  dt = parser.parse(dt_str, tzinfos=tzis).astimezone(tz.tzutc()).replace(tzinfo=None)
+def normalize(dt_str, local_today):
+  dt = parser.parse(dt_str, tzinfos=tzis, default=local_today).astimezone(tz.tzutc()).replace(tzinfo=None)
 
   # Normalize each datetime to within one week from now
   now = datetime.utcnow()
@@ -331,6 +331,7 @@ def get_schedule(schedule_id):
 
     day_time = '%s %s' % (result['day'], result['time'])
     try:
+      # TODO: Ensure valid timezone
       result['datetime'] = parser.parse(day_time)
     except ValueError:
       logging.warning('Warning: invalid time format for %s: %s' % (schedule_id, day_time))
@@ -348,8 +349,12 @@ def get_schedule(schedule_id):
 
 def get_next_event(schedule):
   schedule = json.loads(schedule)
+  # TODO: This needs some clean up
+  time_zone = tzis[schedule[0]['dt'].split(' ')[-1]]
+  midnight = {'hour': 0, 'minute': 0, 'second': 0, 'microsecond': 0, 'tzinfo': None}
+  local_today = datetime.utcnow().replace(tzinfo=tz.tzutc()).astimezone(time_zone).replace(**midnight)
   current_schedule = [{
-    'dt': normalize(entry['dt']),
+    'dt': normalize(entry['dt'], local_today),
     't': entry['t'],
   } for entry in schedule]
   current_schedule.sort(key=lambda x:x['dt'])
