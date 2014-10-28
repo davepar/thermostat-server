@@ -7,6 +7,7 @@ servo with the CC3000 wifi chip.
 
 // Include required libraries
 #include <avr/pgmspace.h>
+#include <avr/wdt.h>
 #include <Adafruit_CC3000.h>
 #include <SPI.h>
 #include <Servo.h>
@@ -43,12 +44,12 @@ prog_char host_path[] PROGMEM = "/getheat?id=" KEY_ID;
 // Timeout values
 const unsigned long DHCP_TIMEOUT = 15L * 1000L; // Max time to wait for address from DHCP
 const unsigned long DNS_TIMEOUT  = 15L * 1000L; // Max time to wait for DNS lookup
-const unsigned long CONNECT_TIMEOUT = 15L * 1000L; // Max time to wait for a connection
 const unsigned long RESPONSE_TIMEOUT = 10L * 1000L; // Max time to wait for data from server
 
-// Connections
+// Servo constants
 const int SERVO_PIN = 9;
-
+const int SERVO_MIN_PULSE = 600;
+const int SERVO_MAX_PULSE = 2400;
 // Servo positions
 const int SERVO_HEAT_ON = 0;
 const int SERVO_HEAT_OFF = 180;
@@ -69,10 +70,8 @@ char buf[130];
 // Local server IP
 unsigned long ip = 0;
 
-int reboots = 0;
-
 // State variables
-int servo_pos = 0;
+int servo_pos = SERVO_HEAT_OFF;
 boolean heat_on = false;
 
 volatile unsigned long last_update_time = 0;
@@ -84,7 +83,6 @@ void fatal_error(const __FlashStringHelper* msg);
 int timedRead(void);
 int readString(int end_char, char *buf, int buf_len);
 void send_request (char *request);
-void setup_cc3000(boolean reboot);
 
 void setup(void)
 {
@@ -93,74 +91,67 @@ void setup(void)
   Serial.print(F("Init connection..."));
 
   // Attach the servo on pin 9 to the servo object
-  myservo.attach(SERVO_PIN);
-  myservo.write(SERVO_HEAT_OFF);
+  myservo.attach(SERVO_PIN, SERVO_MIN_PULSE, SERVO_MAX_PULSE);
+  myservo.write(servo_pos);
 
   // Initialise the CC3000 module
   if (!cc3000.begin()) {
     fatal_error(F("begin"));
-    while(true);
+    while (true) ;
+  }
+  Serial.println(F("cc3000 initialized"));
+
+  // Connect to  WiFi network
+  while (!cc3000.connectToAP(WLAN_SSID, WLAN_PASS, WLAN_SECURITY)) {
+    fatal_error(F("connect"));
+    cc3000.reboot(0);
+  }
+  Serial.println(F("Connected to WiFi!"));
+
+  // Enable watchdog timer
+  wdt_enable(WDTO_8S);
+
+  // Check status of DHCP
+  Serial.println(F("Request DHCP"));
+  unsigned long start_time = millis();
+  while (!cc3000.checkDHCP() && (millis() - start_time) < DHCP_TIMEOUT) {
+    wdt_reset();
+    delay(1000);
+  }
+  if (!cc3000.checkDHCP()) {
+    fatal_error(F("checkDHCP"));
+    // Trigger watch dog reset
+    while (true) ;
   }
 
-  setup_cc3000(false);
-}
-
-void setup_cc3000(boolean reboot) {
-
-  int retries = 0;
-  int max_retries = 3;
-
-  while (true) {
-    retries++;
-
-    if (reboot || retries > 1) {
-      reboots++;
-      cc3000.reboot(0);
+  // Look up server's IP address
+  strcpy_P(buf, host);
+  Serial.print(buf);
+  Serial.print(F(" -> "));
+  start_time = millis();
+  while ((ip  ==  0L) && ((millis() - start_time) < DNS_TIMEOUT))  {
+    cc3000.getHostByName(buf, &ip);
+    if (ip != 0L) {
+      break;
     }
-
-    // Connect to  WiFi network
-    if (!cc3000.connectToAP(WLAN_SSID, WLAN_PASS, WLAN_SECURITY)) {
-      fatal_error(F("connect"));
-      continue;
-    }
-    Serial.println(F("Connected to WiFi!"));
-
-    // Check status of DHCP
-    Serial.println(F("Request DHCP"));
-    unsigned long start_time = millis();
-    while (!cc3000.checkDHCP() && (millis() - start_time) < DHCP_TIMEOUT) {
-      delay(1000);
-    }
-    if (!cc3000.checkDHCP()) {
-      fatal_error(F("checkDHCP"));
-      continue;
-    }
-
-    // Look up server's IP address
-    strcpy_P(buf, host);
-    Serial.print(buf);
-    Serial.print(F(" -> "));
-    start_time = millis();
-    while ((ip  ==  0L) && ((millis() - start_time) < DNS_TIMEOUT))  {
-      cc3000.getHostByName(buf, &ip);
-      if (ip != 0L) {
-        break;
-      }
-      delay(1000);
-    }
-    if (ip == 0L) {
-      fatal_error(F("getHost"));
-      continue;
-    }
-    cc3000.printIPdotsRev(ip);
-    Serial.println();
-    print_free_mem();
-    break;
+    wdt_reset();
+    delay(1000);
   }
+  if (ip == 0L) {
+    fatal_error(F("getHost"));
+    // Trigger watch dog reset
+    while (true) ;
+  }
+  cc3000.printIPdotsRev(ip);
+  Serial.println();
+  print_free_mem();
 }
 
 void loop(void)
 {
+  // Feed the watch dog
+  wdt_reset();
+
   // Determine if update is needed
   unsigned long current_time = millis();
   if ((current_time - last_update_time) >= update_interval) {
@@ -175,16 +166,19 @@ void loop(void)
     strcat(buf, " HTTP/1.0");
     send_request(buf);
   }
+
+  // See if servo position needs to be updated
+  int new_servo = heat_on ? SERVO_HEAT_ON : SERVO_HEAT_OFF;
+  if (servo_pos != new_servo) {
+    servo_pos = new_servo;
+    myservo.write(servo_pos);
+  }
+
+  // If there's been no update for a long time, trigger a watch dog reset
   current_time = millis();
   if ((current_time - last_server_contact) >= RESET_TIME) {
-    heat_on = false;
+    while (true) ;
   }
-  if (heat_on) {
-    servo_pos = SERVO_HEAT_ON;
-  } else {
-    servo_pos = SERVO_HEAT_OFF;
-  }
-  myservo.write(servo_pos);
 
   delay(1);
 }
@@ -198,21 +192,14 @@ void send_request (char *request) {
   Serial.println(F("Sending:"));
   Serial.println(request);
 
-  // Connect
+  // Connect or let watchdog reset everything
   Serial.println(F("Connecting..."));
   unsigned long start_time = millis();
   do {
     wifi_client = cc3000.connectTCP(ip, 80);
   }
-  while (!wifi_client.connected() && (millis() - start_time) < CONNECT_TIMEOUT);
+  while (!wifi_client.connected());
 
-  // Send request
-  if (!wifi_client.connected()) {
-    Serial.println(F("Connection failed, reseting"));
-    cc3000.reboot();
-    setup_cc3000(true);
-    goto final;
-  }
   Serial.println(F("Connection succeeded"));
 
   wifi_client.println(request);
