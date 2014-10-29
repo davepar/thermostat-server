@@ -33,7 +33,7 @@ servo with the CC3000 wifi chip.
 #define UPDATE_INTERVAL 30000
 
 // Turn off heat after 5 minutes of no server contact
-const unsigned long RESET_TIME = 5L * 60L * 1000L;
+const unsigned long RESET_TIME = 10L * 60L * 1000L;
 unsigned long last_server_contact = 0;
 
 #define HOST "arduino-stat.appspot.com"
@@ -48,11 +48,8 @@ const unsigned long RESPONSE_TIMEOUT = 10L * 1000L; // Max time to wait for data
 
 // Servo constants
 const int SERVO_PIN = 9;
-const int SERVO_MIN_PULSE = 600;
-const int SERVO_MAX_PULSE = 2400;
-// Servo positions
-const int SERVO_HEAT_ON = 0;
-const int SERVO_HEAT_OFF = 180;
+const int SERVO_HEAT_ON = 600;
+const int SERVO_HEAT_OFF = 2400;
 
 // Create Servo and CC3000 objects
 Servo myservo;
@@ -91,8 +88,8 @@ void setup(void)
   Serial.print(F("Init connection..."));
 
   // Attach the servo on pin 9 to the servo object
-  myservo.attach(SERVO_PIN, SERVO_MIN_PULSE, SERVO_MAX_PULSE);
-  myservo.write(servo_pos);
+  myservo.attach(SERVO_PIN, SERVO_HEAT_ON, SERVO_HEAT_OFF);
+  myservo.writeMicroseconds(servo_pos);
 
   // Initialise the CC3000 module
   if (!cc3000.begin()) {
@@ -170,8 +167,13 @@ void loop(void)
   // See if servo position needs to be updated
   int new_servo = heat_on ? SERVO_HEAT_ON : SERVO_HEAT_OFF;
   if (servo_pos != new_servo) {
-    servo_pos = new_servo;
-    myservo.write(servo_pos);
+    int delta = (new_servo - servo_pos) / 1800;
+    while (new_servo != servo_pos) {
+      servo_pos += delta;
+      myservo.writeMicroseconds(servo_pos);
+      wdt_reset();
+      delay(5);
+    }
   }
 
   // If there's been no update for a long time, trigger a watch dog reset
