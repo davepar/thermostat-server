@@ -42,7 +42,7 @@
           <button ng-click="changeSetTemp(10)">Up</button>
           <button ng-click="changeSetTemp(-10)">Down</button><br>
       Hold: {{ info.hold ? 'on' : 'off' }}
-          <button ng-click="toggleHold()">Toggle</button><br><br>
+          <button ng-click="changeSetTemp(0, true)">Toggle</button><br><br>
       Token for sending data: {{ info.token }}<br><br>
       <form action="/update" method="post">
         Schedule ID: <input type="text" name="scheduleId" ng-model="info.scheduleId">

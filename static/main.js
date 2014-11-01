@@ -6,7 +6,7 @@
 var myApp = angular.module('Thermostat', []);
 
 myApp.controller('ThermostatCtrl',
-    ['$scope', '$http', function($scope, $http) {
+    ['$scope', '$http', '$timeout', function($scope, $http, $timeout) {
   $scope.info = info_from_server;
 
   $scope.debug = function() {
@@ -27,16 +27,21 @@ myApp.controller('ThermostatCtrl',
       });
   };
 
-  $scope.changeSetTemp = function(amt) {
+  var timeout = null;
+  $scope.changeSetTemp = function(amt, toggleHold) {
     $scope.info.set_temp += amt;
-    $http.get('/post?id=' + $scope.info.id + '&k=' + $scope.info.token +
-        '&s=' + $scope.info.set_temp);
-  }
-
-  $scope.toggleHold = function() {
-    $scope.info.hold = !$scope.info.hold;
-    $http.get('/post?id=' + $scope.info.id + '&k=' + $scope.info.token +
-        '&d=' + ($scope.info.hold ? 'y' : 'n'));
+    if (toggleHold) {
+      $scope.info.hold = !$scope.info.hold;
+    }
+    var update_set_temp = function() {
+      $http.get('/post?id=' + $scope.info.id + '&k=' + $scope.info.token +
+          '&s=' + $scope.info.set_temp +'&d=' + ($scope.info.hold ? 'y' : 'n'));
+    };
+    if (timeout) {
+      $timeout.cancel(timeout);
+    }
+    // Debounce updating set temperature
+    timeout = $timeout(update_set_temp, 2000);
   }
 
   // Distribute values using iterative approach to make it simpler.
