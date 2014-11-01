@@ -1,11 +1,13 @@
-import datetime
 import jinja2
 import json
 import logging
 import os
 import random
 import string
+import urllib2
 import webapp2
+from datetime import datetime, timedelta
+from dateutil import parser, tz
 from google.appengine.api import users
 from google.appengine.ext import ndb
 from google.appengine.ext.webapp import template
@@ -53,13 +55,13 @@ class ThermostatData(ndb.Model):
   @classmethod
   def query_oneday_readings(cls, t_id):
     key = cls.get_key(t_id)
-    one_day_ago = datetime.datetime.utcnow() - datetime.timedelta(hours=24)
+    one_day_ago = datetime.utcnow() - timedelta(hours=24)
     return cls.query(cls.time > one_day_ago, ancestor=key).order(-cls.time)
 
 
 class PostData(webapp2.RequestHandler):
   def get(self):
-    time_now = datetime.datetime.utcnow()
+    time_now = datetime.utcnow()
     # Get some of the values from the query string
     t_id = self.request.get('id')
     if not t_id:
@@ -110,15 +112,13 @@ class PostData(webapp2.RequestHandler):
     # Determine whether set temperature is in request
     set_temp = self.request.get('s', None)
     if set_temp is None:
-      if hold:
-        # Holding temp, ignore schedule
-        set_temp = last_reading.set_temperature
-      else:
-        scheduled_temp = get_scheduled_temp()
-        if scheduled_temp is None:
-          set_temp = last_reading.set_temperature
-        else:
-          set_temp = scheduled_temp
+      set_temp = last_reading.set_temperature
+      # If holding temp, ignore schedule
+      if (not hold and id_data.schedule_id
+            and datetime.utcnow() > id_data.next_temp_change):
+          set_temp, next_temp_change = get_next_event(id_data.schedule)
+          id_data.next_temp_change = next_temp_change
+          id_data.put()
     else:
       set_temp = int(set_temp)
 
@@ -130,7 +130,7 @@ class PostData(webapp2.RequestHandler):
 
     logging.info('%s,%s,%s,%s,%s' % (temp,hum,set_temp,hold,heat_on))
 
-    storage_interval = datetime.timedelta(minutes=5, seconds=10)
+    storage_interval = timedelta(minutes=5, seconds=10)
     if not prev_reading or prev_reading.time + storage_interval < time_now:
       new_data = ThermostatData(
           parent=ThermostatData.get_key(t_id),
@@ -160,7 +160,7 @@ class PostData(webapp2.RequestHandler):
     self.response.write('%s,%s,%s' % (set_temp, int(hold), int(heat_on)))
 
 
-class GetData(webapp2.RequestHandler):
+class GetHeat(webapp2.RequestHandler):
   def get(self):
     t_id = self.request.get('id')
     reading = ThermostatData.query_readings(t_id).get()
@@ -169,15 +169,38 @@ class GetData(webapp2.RequestHandler):
 
 class Schedule(webapp2.RequestHandler):
   def post(self):
+    message = None
     t_id = self.request.get('id')
     s_id = self.request.get('scheduleId')
     cur_user = users.get_current_user()
     id_data = IdData.get_id(t_id)
     if cur_user and id_data.user_id == cur_user.user_id():
-      id_data.schedule_id = s_id
-      id_data.put()
+      schedule = get_schedule(s_id)
+      if schedule:
+        set_temperature, next_temp_change = get_next_event(schedule)
+        id_data.schedule_id = s_id
+        id_data.schedule = schedule
+        id_data.next_temp_change = next_temp_change
+        id_data.put()
+        print 'Next change: %s' % next_temp_change
 
-    return self.redirect('/?id=' + t_id)
+        last_reading = ThermostatData.query_readings(t_id).get()
+        if last_reading:
+          last_reading.set_temperature = set_temperature
+          last_reading.put()
+          message = 'Successfully updated schedule'
+        else:
+          # TODO: Create new ThermostatData
+          pass
+      else:
+        message = 'Could not process schedule'
+    else:
+      message = 'Must be logged in to update schedule'
+
+    url = '/?id=' + t_id
+    if message:
+      url += '&msg=' + message
+    return self.redirect(url)
 
 
 class Thermostat(webapp2.RequestHandler):
@@ -187,6 +210,7 @@ class Thermostat(webapp2.RequestHandler):
       'login': None,
       'claimed': False,
       'owned': False,
+      'message': self.request.get('msg'),
     }
     # Check if ID specified
     # TODO: ID can only be up to 11 characters long
@@ -236,20 +260,111 @@ class Thermostat(webapp2.RequestHandler):
     template = JINJA_ENV.get_template('index.html')
     self.response.write(template.render({'info': json.dumps(info, separators=(',',':'))}))
 
+
+us_schedule = ',M3.2.0,M11.1.0'
+
+tzis = {
+    'ET': tz.tzstr('EST+5EDT' + us_schedule),
+    'CT': tz.tzstr('CST+6CDT' + us_schedule),
+    'MT': tz.tzstr('MST+7MDT' + us_schedule),
+    'AZT': tz.tzstr('MST+7'),
+    'PT': tz.tzstr('PST+8PDT' + us_schedule),
+    'AKT': tz.tzstr('AKST+9AKDT' + us_schedule),
+    'HAT': tz.tzstr('HAST+10HADT' + us_schedule),
+    'HT': tz.tzstr('HAST+10'),
+}
+
+def normalize(dt_str, local_today):
+  dt = parser.parse(dt_str, tzinfos=tzis, default=local_today).astimezone(tz.tzutc()).replace(tzinfo=None)
+
+  # Normalize each datetime to within one week from now
+  now = datetime.utcnow()
+  oneweek = timedelta(days=7)
+  oneweek_from_now = now + oneweek
+  while dt < now:
+    dt += oneweek
+  while dt > oneweek_from_now:
+    dt -= oneweek
+  return dt
+
 def add_value_to_average(old_value, new_value, num_averaged):
   return (old_value * num_averaged + new_value) / (num_averaged + 1)
-
-def get_scheduled_temp():
-  return None
 
 def create_token():
   random.seed()
   return ''.join([random.choice(string.ascii_letters + string.digits) for x in range(8)])
 
+def get_schedule(schedule_id):
+  url = 'https://spreadsheets.google.com/feeds/list/%s/od6/public/values?alt=json' % schedule_id
+  try:
+    response = urllib2.urlopen(url)
+    content = response.read()
+  except urllib2.URLError:
+    logging.warning('Warning: could not retrieve spreadsheet data for %s' % schedule_id)
+    return False
+
+  try:
+    data = json.loads(content)
+  except ValueError:
+    logging.error('Error: invalid JSON format for spreadsheet %s' % schedule_id)
+    return False
+
+  if 'feed' not in data or 'entry' not in data['feed']:
+    logging.warning('Warning: invalid data format for %s' % schedule_id)
+    return False
+
+  data_keys = [
+    ('gsx$day', 'day'),
+    ('gsx$time', 'time'),
+    ('gsx$temperature', 'temperature'),
+  ]
+
+  # Process entries in spreadsheet
+  schedule = []
+  for entry in data['feed']['entry']:
+    result = {}
+    for entry_key, result_key in data_keys:
+      if entry_key not in entry or '$t' not in entry[entry_key]:
+        logging.warning('Warning: key not found for %s: %s' % (schedule_id, entry_key))
+        return False
+      result[result_key] = entry[entry_key]['$t']
+
+    day_time = '%s %s' % (result['day'], result['time'])
+    try:
+      # TODO: Ensure valid timezone
+      result['datetime'] = parser.parse(day_time)
+    except ValueError:
+      logging.warning('Warning: invalid time format for %s: %s' % (schedule_id, day_time))
+      return False
+    try:
+      result['temperature'] = int(result['temperature'])
+    except ValueError:
+      logging.warning('Warning: invalid temperature format for %s: %s'
+          % (schedule_id, result['temperature']))
+      return False
+
+    schedule.append({'dt': day_time, 't': result['temperature']})
+
+  return json.dumps(schedule, separators=(',', ':'))
+
+def get_next_event(schedule):
+  schedule = json.loads(schedule)
+  # TODO: This needs some clean up
+  time_zone = tzis[schedule[0]['dt'].split(' ')[-1]]
+  midnight = {'hour': 0, 'minute': 0, 'second': 0, 'microsecond': 0, 'tzinfo': None}
+  local_today = datetime.utcnow().replace(tzinfo=tz.tzutc()).astimezone(time_zone).replace(**midnight)
+  current_schedule = [{
+    'dt': normalize(entry['dt'], local_today),
+    't': entry['t'],
+  } for entry in schedule]
+  current_schedule.sort(key=lambda x:x['dt'])
+  print current_schedule
+  return current_schedule[-1]['t'] * 10, current_schedule[0]['dt']
+
 
 app = webapp2.WSGIApplication([
     ('/post', PostData),
-    ('/getheat', GetData),
+    ('/getheat', GetHeat),
     ('/update', Schedule),
     ('/', Thermostat),
 ], debug=True)
