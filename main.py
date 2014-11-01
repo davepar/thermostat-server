@@ -281,6 +281,7 @@ class Thermostat(webapp2.RequestHandler):
         if last_reading:
           info['heat'] = last_reading.heat_on
           info['hold'] = last_reading.hold
+          info['set_temp'] = last_reading.set_temperature
           info['data'] = values
 
     template = JINJA_ENV.get_template('index.html')

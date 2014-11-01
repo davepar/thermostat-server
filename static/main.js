@@ -27,6 +27,18 @@ myApp.controller('ThermostatCtrl',
       });
   };
 
+  $scope.changeSetTemp = function(amt) {
+    $scope.info.set_temp += amt;
+    $http.get('/post?id=' + $scope.info.id + '&k=' + $scope.info.token +
+        '&s=' + $scope.info.set_temp);
+  }
+
+  $scope.toggleHold = function() {
+    $scope.info.hold = !$scope.info.hold;
+    $http.get('/post?id=' + $scope.info.id + '&k=' + $scope.info.token +
+        '&d=' + ($scope.info.hold ? 'y' : 'n'));
+  }
+
   // Distribute values using iterative approach to make it simpler.
   function distribute(vals, keys, delta) {
     function compare(a, b) {
@@ -236,7 +248,7 @@ myApp.controller('ThermostatCtrl',
       .attr('text-anchor', 'middle')
       .style('font-size', '12px')
       .text(lastValue['time'].toLocaleString());
-  var line3 = 'Heat: ' + ($scope.info.heat ? 'on' : 'off') + ' - Hold: ' + ($scope.info.hold ? 'on' : 'off');
+  var line3 = 'Heat: ' + ($scope.info.heat ? 'on' : 'off');
   svg.append('text')
       .attr('x', (width / 2))
       .attr('y', 32)

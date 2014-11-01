@@ -38,6 +38,11 @@
       <a href="{{ info.login }}">Sign in</a> to set temperature
     </div>
     <div ng-show="info.token">
+      Current setting: {{ info.set_temp / 10 }}&deg;
+          <button ng-click="changeSetTemp(10)">Up</button>
+          <button ng-click="changeSetTemp(-10)">Down</button><br>
+      Hold: {{ info.hold ? 'on' : 'off' }}
+          <button ng-click="toggleHold()">Toggle</button><br><br>
       Token for sending data: {{ info.token }}<br><br>
       <form action="/update" method="post">
         Schedule ID: <input type="text" name="scheduleId" ng-model="info.scheduleId">
