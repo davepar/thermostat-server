@@ -42,6 +42,7 @@
       <form action="/update" method="post">
         Schedule ID: <input type="text" name="scheduleId" ng-model="info.scheduleId">
         <input type="hidden" name="id" value="{{ info.id }}">
+        <select name="tz" ng-model="info.tz" ng-options="tz.abbr as tz.name + ' time' for tz in info.timezones"></select>
         <button ng-disabled="!info.scheduleId">Update</button>
       </form>
     </div>

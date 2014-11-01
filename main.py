@@ -18,11 +18,27 @@ JINJA_ENV = jinja2.Environment(
   autoescape=True,
 )
 
+# Time zones
+dt_schedule = ',M3.2.0,M11.1.0'
+time_zones = [
+  ('Eastern', 'ET', 'EST+5EDT' + dt_schedule),
+  ('Central', 'CT', 'CST+6CDT' + dt_schedule),
+  ('Mountain', 'MT', 'MST+7MDT' + dt_schedule),
+  ('Arizona', 'AZT', 'MST+7'),
+  ('Pacific', 'PT', 'PST+8PDT' + dt_schedule),
+  ('Alaska', 'AKT', 'AKST+9AKDT' + dt_schedule),
+  ('Hawaii-Aleutian', 'HAT', 'HAST+10HADT' + dt_schedule),
+  ('Hawaii', 'HT', 'HAST+10'),
+]
+tzinfos = dict([(t[1], tz.tzstr(t[2])) for t in time_zones])
+tz_select_array = [{'abbr': t[1], 'name': t[0]} for t in time_zones]
+
 class IdData(ndb.Model):
   user_id = ndb.StringProperty('u')
   token = ndb.StringProperty('t')
   next_temp_change = ndb.DateTimeProperty('n')
   schedule_id = ndb.StringProperty('c')
+  timezone = ndb.StringProperty('z')
   schedule = ndb.TextProperty('s')
 
   @classmethod
@@ -172,17 +188,20 @@ class Schedule(webapp2.RequestHandler):
     message = None
     t_id = self.request.get('id')
     s_id = self.request.get('scheduleId')
+    # Convert from array index back to time zone abbreviation
+    timezone = tz_select_array[int(self.request.get('tz'))]['abbr']
     cur_user = users.get_current_user()
     id_data = IdData.get_id(t_id)
     if cur_user and id_data.user_id == cur_user.user_id():
-      schedule = get_schedule(s_id)
+      schedule = get_schedule(s_id, timezone)
       if schedule:
         set_temperature, next_temp_change = get_next_event(schedule)
         id_data.schedule_id = s_id
+        id_data.timezone = timezone
         id_data.schedule = schedule
         id_data.next_temp_change = next_temp_change
         id_data.put()
-        print 'Next change: %s' % next_temp_change
+        # print 'Next change: %s' % next_temp_change
 
         last_reading = ThermostatData.query_readings(t_id).get()
         if last_reading:
@@ -211,6 +230,7 @@ class Thermostat(webapp2.RequestHandler):
       'claimed': False,
       'owned': False,
       'message': self.request.get('msg'),
+      'timezones': tz_select_array,
     }
     # Check if ID specified
     # TODO: ID can only be up to 11 characters long
@@ -241,6 +261,7 @@ class Thermostat(webapp2.RequestHandler):
         if cur_user and id_data.user_id == cur_user.user_id():
           info['token'] = id_data.token
           info['scheduleId'] = id_data.schedule_id
+          info['tz'] = id_data.timezone
 
         # Reformat readings to put them into the template
         readings = ThermostatData.query_oneday_readings(t_id)
@@ -261,21 +282,8 @@ class Thermostat(webapp2.RequestHandler):
     self.response.write(template.render({'info': json.dumps(info, separators=(',',':'))}))
 
 
-us_schedule = ',M3.2.0,M11.1.0'
-
-tzis = {
-    'ET': tz.tzstr('EST+5EDT' + us_schedule),
-    'CT': tz.tzstr('CST+6CDT' + us_schedule),
-    'MT': tz.tzstr('MST+7MDT' + us_schedule),
-    'AZT': tz.tzstr('MST+7'),
-    'PT': tz.tzstr('PST+8PDT' + us_schedule),
-    'AKT': tz.tzstr('AKST+9AKDT' + us_schedule),
-    'HAT': tz.tzstr('HAST+10HADT' + us_schedule),
-    'HT': tz.tzstr('HAST+10'),
-}
-
 def normalize(dt_str, local_today):
-  dt = parser.parse(dt_str, tzinfos=tzis, default=local_today).astimezone(tz.tzutc()).replace(tzinfo=None)
+  dt = parser.parse(dt_str, tzinfos=tzinfos, default=local_today).astimezone(tz.tzutc()).replace(tzinfo=None)
 
   # Normalize each datetime to within one week from now
   now = datetime.utcnow()
@@ -294,7 +302,7 @@ def create_token():
   random.seed()
   return ''.join([random.choice(string.ascii_letters + string.digits) for x in range(8)])
 
-def get_schedule(schedule_id):
+def get_schedule(schedule_id, timezone):
   url = 'https://spreadsheets.google.com/feeds/list/%s/od6/public/values?alt=json' % schedule_id
   try:
     response = urllib2.urlopen(url)
@@ -329,7 +337,7 @@ def get_schedule(schedule_id):
         return False
       result[result_key] = entry[entry_key]['$t']
 
-    day_time = '%s %s' % (result['day'], result['time'])
+    day_time = '%s %s %s' % (result['day'], result['time'], timezone)
     try:
       # TODO: Ensure valid timezone
       result['datetime'] = parser.parse(day_time)
@@ -350,7 +358,7 @@ def get_schedule(schedule_id):
 def get_next_event(schedule):
   schedule = json.loads(schedule)
   # TODO: This needs some clean up
-  time_zone = tzis[schedule[0]['dt'].split(' ')[-1]]
+  time_zone = tzinfos[schedule[0]['dt'].split(' ')[-1]]
   midnight = {'hour': 0, 'minute': 0, 'second': 0, 'microsecond': 0, 'tzinfo': None}
   local_today = datetime.utcnow().replace(tzinfo=tz.tzutc()).astimezone(time_zone).replace(**midnight)
   current_schedule = [{
@@ -358,7 +366,6 @@ def get_next_event(schedule):
     't': entry['t'],
   } for entry in schedule]
   current_schedule.sort(key=lambda x:x['dt'])
-  print current_schedule
   return current_schedule[-1]['t'] * 10, current_schedule[0]['dt']
 
 
