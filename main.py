@@ -32,6 +32,7 @@ time_zones = [
 ]
 tzinfos = dict([(t[1], tz.tzstr(t[2])) for t in time_zones])
 tz_select_array = [{'abbr': t[1], 'name': t[0]} for t in time_zones]
+default_tz = tz_select_array[0]['abbr']
 
 class IdData(ndb.Model):
   user_id = ndb.StringProperty('u')
@@ -261,7 +262,7 @@ class Thermostat(webapp2.RequestHandler):
         if cur_user and id_data.user_id == cur_user.user_id():
           info['token'] = id_data.token
           info['scheduleId'] = id_data.schedule_id
-          info['tz'] = id_data.timezone
+          info['tz'] = id_data.timezone or default_tz
 
         # Reformat readings to put them into the template
         readings = ThermostatData.query_oneday_readings(t_id)
