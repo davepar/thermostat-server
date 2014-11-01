@@ -95,23 +95,13 @@ class PostData(webapp2.RequestHandler):
       self.response.write('Error: invalid token')
       return
 
-    temp = self.request.get('t')
-    hum = self.request.get('h')
-    if not temp or not hum:
-      self.response.write('Error: invalid parameters')
-      return
-
-    # Convert temp and humidity for storage as integers
-    temp = int(temp)
-    hum = int(hum)
-
     # Get previously saved record
     prev_reading = last_reading = None
     readings = ThermostatData.query_readings(t_id).fetch(2)
     if len(readings) == 0:
       # Create a fake last_reading with some default values
       last_reading = ThermostatData(
-          temperature=temp, humidity=hum,
+          temperature=680, humidity=500,
           set_temperature=680, hold=False, heat_on=False
       )
     else:
@@ -119,14 +109,28 @@ class PostData(webapp2.RequestHandler):
       if len(readings) > 1:
         prev_reading = readings[1]
 
-    # Determine whether hold temperature is in request
+    # Get current temperature from request
+    temp = self.request.get('t', None)
+    if temp is None:
+      temp = last_reading.temperature
+    else:
+      temp = int(temp)
+
+    # Get current humidity from request
+    hum = self.request.get('h', None)
+    if hum is None:
+      hum = last_reading.humidity
+    else:
+      hum = int(hum)
+
+    # Get "hold temperature" from request
     hold = self.request.get('d', None)
     if hold is None:
       hold = last_reading.hold
     else:
       hold = (hold == 'y')
 
-    # Determine whether set temperature is in request
+    # Get set temperature from request
     set_temp = self.request.get('s', None)
     if set_temp is None:
       set_temp = last_reading.set_temperature
