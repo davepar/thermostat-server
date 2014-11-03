@@ -209,7 +209,7 @@ class Schedule(webapp2.RequestHandler):
         # print 'Next change: %s' % next_temp_change
 
         last_reading = ThermostatData.query_readings(t_id).get()
-        if last_reading:
+        if last_reading and not last_reading.hold:
           last_reading.set_temperature = set_temperature
           last_reading.put()
           message = 'Successfully updated schedule'
